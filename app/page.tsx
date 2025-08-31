@@ -2,28 +2,55 @@
 
 import { ConnectButton } from '@rainbow-me/rainbowkit';
 import { useWallets } from '@/hooks/useWallets';
+import { usePrices } from '@/hooks/usePrices';
 import { truncateAddress } from '@/lib/utils/format';
 import { useState, useEffect } from 'react';
-import { fetchTokenPrices } from '@/lib/defi/prices';
+import { TransactionBuilder } from '@/lib/wallet/transaction-builder';
+import { PriceSkeleton, PositionSkeleton } from '@/components/ui/Skeleton';
 
 export default function Home() {
   const { evmWallet, starknetWallet, connectStarkNet, disconnectStarkNet, evmConnected } = useWallets();
-  const [prices, setPrices] = useState({ ETH: 0, USDC: 0 });
+  const { prices, loading: pricesLoading } = usePrices();
+  const [isClient, setIsClient] = useState(false);
   const [showSwap, setShowSwap] = useState(false);
+  const [swapAmount, setSwapAmount] = useState('');
+  
+  useEffect(() => {
+    setIsClient(true);
+  }, []);
   
   const hasAnyWallet = evmConnected || starknetWallet !== null;
+  
+  // Calculate values only when prices are loaded
+  const uniswapValue = prices ? (0.85 * prices.ETH).toFixed(0) : '0';
+  const jediswapValue = prices ? (0.4 * prices.ETH).toFixed(0) : '0';
 
-  useEffect(() => {
-    fetchTokenPrices().then(setPrices);
-    const interval = setInterval(() => {
-      fetchTokenPrices().then(setPrices);
-    }, 30000); // Update every 30s
-    return () => clearInterval(interval);
-  }, []);
+  const handleSwap = () => {
+    if (!swapAmount) {
+      alert('Please enter an amount');
+      return;
+    }
+    
+    const activeWallet = evmConnected ? evmWallet : starknetWallet;
+    const chainType = evmConnected ? 'EVM' : 'STARKNET';
+    
+    if (!activeWallet) {
+      alert('Please connect a wallet first');
+      return;
+    }
 
-  // Calculate position values based on real prices
-  const uniswapValue = prices.ETH ? (0.85 * prices.ETH).toFixed(0) : '0';
-  const jediswapValue = prices.ETH ? (0.4 * prices.ETH).toFixed(0) : '0';
+    const tx = TransactionBuilder.buildSwapTransaction(
+      chainType,
+      'ETH',
+      'USDC', 
+      swapAmount,
+      activeWallet.address
+    );
+
+    console.log('Transaction built for', chainType, ':', tx);
+    console.log('Gas estimate:', TransactionBuilder.estimateGas(chainType));
+    alert(`Swap transaction prepared for ${chainType} chain. Check console for details.`);
+  };
 
   return (
     <main className="container">
@@ -33,8 +60,12 @@ export default function Home() {
       <div className="wallet-section">
         <div className="wallet-card">
           <h3>EVM Wallet</h3>
-          <ConnectButton />
-          {evmWallet && (
+          {isClient ? (
+            <ConnectButton />
+          ) : (
+            <button className="btn">Connect Wallet</button>
+          )}
+          {isClient && evmWallet && (
             <div className="wallet-info">
               <small>Connected: {truncateAddress(evmWallet.address)}</small>
             </div>
@@ -43,57 +74,76 @@ export default function Home() {
         
         <div className="wallet-card">
           <h3>StarkNet Wallet</h3>
-          {!starknetWallet ? (
-            <button className="btn" onClick={connectStarkNet}>
-              Connect Braavos (Simulated)
-            </button>
-          ) : (
-            <div>
-              <div className="wallet-info">
-                <small>Connected: {truncateAddress(starknetWallet.address)}</small>
-              </div>
-              <button className="btn-disconnect" onClick={disconnectStarkNet}>
-                Disconnect
+          {isClient ? (
+            !starknetWallet ? (
+              <button className="btn" onClick={connectStarkNet}>
+                Connect Braavos (Simulated)
               </button>
-            </div>
+            ) : (
+              <div>
+                <div className="wallet-info">
+                  <small>Connected: {truncateAddress(starknetWallet.address)}</small>
+                </div>
+                <button className="btn-disconnect" onClick={disconnectStarkNet}>
+                  Disconnect
+                </button>
+              </div>
+            )
+          ) : (
+            <button className="btn">Connect Braavos (Simulated)</button>
           )}
         </div>
       </div>
 
-      {hasAnyWallet && (
+      {isClient && hasAnyWallet && (
         <>
           <div className="positions-section">
             <h2>DeFi Positions</h2>
-            <div className="price-ticker">
-              ETH: ${prices.ETH.toLocaleString()} | USDC: ${prices.USDC}
-            </div>
             
-            {evmConnected && (
-              <div className="position-card">
-                <div className="position-header">
-                  <span className="protocol">Uniswap V3</span>
-                  <span className="value">${uniswapValue}</span>
-                </div>
-                <div className="position-details">
-                  <p>WETH/USDC • 0.3% fee tier</p>
-                  <p>Liquidity: 0.85 WETH</p>
-                  <p>Chain: Ethereum Sepolia</p>
-                </div>
+            {/* Price ticker with loading state */}
+            {pricesLoading ? (
+              <PriceSkeleton />
+            ) : prices ? (
+              <div className="price-ticker">
+                ETH: ${prices.ETH.toLocaleString()} | USDC: ${prices.USDC}
               </div>
+            ) : null}
+            
+            {/* Positions with loading states */}
+            {evmConnected && (
+              pricesLoading ? (
+                <PositionSkeleton />
+              ) : (
+                <div className="position-card">
+                  <div className="position-header">
+                    <span className="protocol">Uniswap V3</span>
+                    <span className="value">${uniswapValue}</span>
+                  </div>
+                  <div className="position-details">
+                    <p>WETH/USDC • 0.3% fee tier</p>
+                    <p>Liquidity: 0.85 WETH</p>
+                    <p>Chain: Ethereum Sepolia</p>
+                  </div>
+                </div>
+              )
             )}
             
             {starknetWallet && (
-              <div className="position-card">
-                <div className="position-header">
-                  <span className="protocol">JediSwap</span>
-                  <span className="value">${jediswapValue}</span>
+              pricesLoading ? (
+                <PositionSkeleton />
+              ) : (
+                <div className="position-card">
+                  <div className="position-header">
+                    <span className="protocol">JediSwap</span>
+                    <span className="value">${jediswapValue}</span>
+                  </div>
+                  <div className="position-details">
+                    <p>ETH/USDC • 0.3% fee tier</p>
+                    <p>Liquidity: 0.4 ETH</p>
+                    <p>Chain: StarkNet Sepolia</p>
+                  </div>
                 </div>
-                <div className="position-details">
-                  <p>ETH/USDC • 0.3% fee tier</p>
-                  <p>Liquidity: 0.4 ETH</p>
-                  <p>Chain: StarkNet Sepolia</p>
-                </div>
-              </div>
+              )
             )}
           </div>
 
@@ -109,24 +159,35 @@ export default function Home() {
                 </>
               ) : (
                 <div className="swap-interface">
+                  <div style={{ marginBottom: '1rem', color: '#a0a0a0' }}>
+                    Active Chain: {evmConnected ? 'Ethereum' : 'StarkNet'}
+                  </div>
                   <div className="swap-input">
                     <label>From</label>
-                    <input type="number" placeholder="0.0" />
+                    <input 
+                      type="number" 
+                      placeholder="0.0" 
+                      value={swapAmount}
+                      onChange={(e) => setSwapAmount(e.target.value)}
+                    />
                     <select>
                       <option>ETH</option>
-                      <option>USDC</option>
                     </select>
                   </div>
                   <div className="swap-arrow">↓</div>
                   <div className="swap-input">
                     <label>To</label>
-                    <input type="number" placeholder="0.0" disabled />
+                    <input 
+                      type="number" 
+                      placeholder="0.0" 
+                      value={swapAmount && prices ? (parseFloat(swapAmount) * prices.ETH).toFixed(2) : ''}
+                      disabled 
+                    />
                     <select>
                       <option>USDC</option>
-                      <option>ETH</option>
                     </select>
                   </div>
-                  <button className="btn btn-swap">Execute Swap</button>
+                  <button className="btn-swap" onClick={handleSwap}>Execute Swap</button>
                 </div>
               )}
             </div>
