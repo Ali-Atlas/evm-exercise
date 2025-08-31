@@ -1,36 +1,59 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Cross-Chain DeFi Portfolio Tracker
 
-## Getting Started
+Quick implementation of a unified interface for EVM and StarkNet wallets with transaction abstraction.
 
-First, run the development server:
+## What This Solves
+
+Built a wallet abstraction layer that handles both MetaMask (EVM) and Braavos/ArgentX (StarkNet) with a single interface. The main challenge was abstracting the different transaction formats - EVM uses RLP encoding while StarkNet uses Cairo.
+
+## Architecture
+
+Created a `UnifiedWallet` interface that both wallet types implement:
+- EVMWalletAdapter wraps wagmi/viem
+- StarkNetWalletAdapter wraps starknet.js
+- TransactionBuilder handles the different transaction formats
+
+This way the UI doesn't need to know which chain it's dealing with.
+
+## Tech Stack
+
+- Next.js 15 with TypeScript
+- Viem/Wagmi for EVM 
+- Starknet.js for StarkNet
+- RainbowKit for wallet UI
+- CoinGecko for price feeds
+
+## Key Implementation Details
+
+**Wallet Detection**: RainbowKit handles EVM wallets automatically. StarkNet is simulated since the actual integration is complex and time-constrained.
+
+**Transaction Building**: Different formats per chain but same interface - `TransactionBuilder.buildSwapTransaction()` handles both EVM (RLP-encoded) and StarkNet (Cairo calldata).
+
+**Hydration Fix**: Dynamic content (wallets, prices) only renders client-side with loading skeletons to prevent SSR mismatches.
+
+## Running It
 
 ```bash
+npm install
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+## What's Production vs Demo
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+**Working:**
+- MetaMask connection
+- Transaction building for both chains
+- Real ETH prices
+- Proper loading states
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+**Simulated:**
+- StarkNet wallet connection (would use get-starknet in production)
+- Actual transaction execution
+- Position fetching (mocked data)
 
-## Learn More
+## Notes
 
-To learn more about Next.js, take a look at the following resources:
+- Used BigInt for token amounts to avoid precision issues
+- Address checksumming for security
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+The abstraction pattern makes it easy to add more chains - just implement the adapter interface.
